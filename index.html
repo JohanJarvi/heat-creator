@@ -482,7 +482,9 @@
         chip.className = 'surfer-chip';
         chip.style.background = s.color.bg + '22';
         chip.style.borderColor = s.color.bg;
-        chip.style.color = s.color.bg === '#FFFFFF' ? '#f1f5f9' : s.color.bg;
+        chip.style.color = s.color.bg === '#FFFFFF' ? '#f1f5f9'
+          : s.color.bg === '#1A202C' ? '#94a3b8'
+          : s.color.bg;
         chip.innerHTML = `
           <span class="vest-badge" style="background:${s.color.bg};color:${s.color.text};border:1.5px solid ${s.color.border}">${s.vestNumber}</span>
           <span>${escHtml(s.name)}</span>
