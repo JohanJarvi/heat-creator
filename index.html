@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Heat Creator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #334155;
+      --border: #475569;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #7dd3fc;
+      --danger: #f87171;
+      --danger-hover: #fca5a5;
+      --radius: 10px;
+      --radius-sm: 6px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      padding: 1.5rem 1rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--accent);
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+
+    header svg { flex-shrink: 0; }
+
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ── Buttons ── */
+    button {
+      font: inherit;
+      cursor: pointer;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 0.55rem 1.1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #0f172a;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { color: var(--text); border-color: var(--text-muted); }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid var(--danger);
+    }
+    .btn-danger:hover { background: var(--danger); color: #0f172a; }
+
+    /* ── Screen 1: Home ── */
+    #screen-home .toolbar {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 1.5rem;
+    }
+
+    .draw-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+    .draw-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .draw-card:hover { border-color: var(--accent); }
+
+    .draw-card-info { flex: 1; min-width: 0; }
+    .draw-card-date {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 0.2rem;
+    }
+    .draw-card-meta { font-size: 0.875rem; color: var(--text-muted); }
+    .draw-card-meta strong { color: var(--text); font-weight: 600; }
+
+    .empty-state {
+      text-align: center;
+      padding: 4rem 1rem;
+      color: var(--text-muted);
+    }
+    .empty-state p { margin-bottom: 1.25rem; font-size: 0.95rem; }
+
+    /* ── Screen 2: Name Entry ── */
+    #screen-entry .top-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    #screen-entry h2 { font-size: 1.1rem; font-weight: 600; flex: 1; }
+
+    .input-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.95rem;
+      padding: 0.6rem 0.9rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus { border-color: var(--accent); }
+    input[type="text"]::placeholder { color: var(--text-muted); }
+
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      min-height: 2.5rem;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.3rem 0.75rem 0.3rem 0.9rem;
+      font-size: 0.875rem;
+      color: var(--text);
+    }
+
+    .pill-remove {
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      transition: color 0.15s;
+    }
+    .pill-remove:hover { color: var(--danger); }
+
+    .entry-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .entry-footer .count { font-size: 0.875rem; color: var(--text-muted); }
+
+    /* ── Screen 3: Draw View ── */
+    #screen-draw .top-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+      flex-wrap: wrap;
+    }
+    #screen-draw h2 { font-size: 1.1rem; font-weight: 600; flex: 1; }
+
+    .draw-meta {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 1.75rem;
+    }
+
+    .heats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1rem;
+    }
+
+    .heat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+    }
+
+    .heat-card h3 {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+
+    .heat-surfers { display: flex; flex-direction: column; gap: 0.4rem; }
+
+    .surfer-chip {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      border-radius: var(--radius-sm);
+      padding: 0.45rem 0.75rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      border: 2px solid transparent;
+    }
+
+    .vest-badge {
+      font-size: 0.7rem;
+      font-weight: 800;
+      min-width: 1.4rem;
+      height: 1.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M4 20 Q8 10 14 14 Q20 18 24 8" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+    <circle cx="14" cy="7" r="3" fill="#38bdf8"/>
+  </svg>
+  <h1>Heat Creator</h1>
+</header>
+
+<!-- ── Screen 1: Home ── -->
+<section id="screen-home" class="screen active">
+  <div class="toolbar">
+    <button class="btn-primary" id="btn-new-draw">+ New Draw</button>
+  </div>
+  <div class="draw-list" id="draw-list"></div>
+  <div class="empty-state" id="empty-state" style="display:none">
+    <p>No draws saved yet.</p>
+    <button class="btn-primary" id="btn-new-draw-empty">+ New Draw</button>
+  </div>
+</section>
+
+<!-- ── Screen 2: Name Entry ── -->
+<section id="screen-entry" class="screen">
+  <div class="top-bar">
+    <button class="btn-ghost" id="btn-entry-back">← Back</button>
+    <h2>Add Surfers</h2>
+  </div>
+  <div class="input-row">
+    <input type="text" id="name-input" placeholder="Surfer name…" autocomplete="off" />
+    <button class="btn-primary" id="btn-add-name">Add</button>
+  </div>
+  <div class="pill-list" id="pill-list"></div>
+  <div class="entry-footer">
+    <span class="count" id="surfer-count">0 surfers</span>
+    <button class="btn-primary" id="btn-generate" disabled>Generate Heats</button>
+  </div>
+</section>
+
+<!-- ── Screen 3: Draw View ── -->
+<section id="screen-draw" class="screen">
+  <div class="top-bar">
+    <button class="btn-ghost" id="btn-draw-back">← Back</button>
+    <h2 id="draw-title">Heat Draw</h2>
+    <button class="btn-ghost" id="btn-regenerate" style="display:none">Regenerate</button>
+    <button class="btn-primary" id="btn-save" style="display:none">Save Draw</button>
+    <button class="btn-danger" id="btn-delete" style="display:none">Delete</button>
+  </div>
+  <div class="draw-meta" id="draw-meta"></div>
+  <div class="heats-grid" id="heats-grid"></div>
+</section>
+
+<script type="module">
+  import { buildHeats, VEST_COLORS } from './heat-algorithm.js';
+
+  // ── State ──
+  const STORAGE_KEY = 'heat-creator-draws';
+  let surfers = [];        // working list on entry screen
+  let currentDraw = null;  // { heats, surfers, id?, createdAt?, isNew }
+
+  // ── Storage helpers ──
+  function loadDraws() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    catch { return []; }
+  }
+
+  function saveDraws(draws) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(draws));
+  }
+
+  function persistDraw(draw) {
+    const draws = loadDraws();
+    draws.unshift(draw);
+    saveDraws(draws);
+  }
+
+  function deleteDraw(id) {
+    const draws = loadDraws().filter(d => d.id !== id);
+    saveDraws(draws);
+  }
+
+  function generateId() {
+    return crypto.randomUUID ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+
+  // ── Screen routing ──
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if (id === 'screen-entry') {
+      setTimeout(() => document.getElementById('name-input').focus(), 50);
+    }
+  }
+
+  // ── Home screen ──
+  function renderHome() {
+    const draws = loadDraws();
+    const list = document.getElementById('draw-list');
+    const empty = document.getElementById('empty-state');
+    list.innerHTML = '';
+
+    if (draws.length === 0) {
+      empty.style.display = 'block';
+      list.style.display = 'none';
+      return;
+    }
+
+    empty.style.display = 'none';
+    list.style.display = 'flex';
+
+    draws.forEach(draw => {
+      const card = document.createElement('div');
+      card.className = 'draw-card';
+      const date = new Date(draw.createdAt).toLocaleDateString(undefined, {
+        weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+      card.innerHTML = `
+        <div class="draw-card-info">
+          <div class="draw-card-date">${date}</div>
+          <div class="draw-card-meta">
+            <strong>${draw.surfers.length} surfers</strong> &middot;
+            ${draw.heats.length} heat${draw.heats.length !== 1 ? 's' : ''}
+          </div>
+        </div>
+        <button class="btn-danger delete-btn" data-id="${draw.id}">Delete</button>
+      `;
+      card.addEventListener('click', (e) => {
+        if (e.target.classList.contains('delete-btn')) return;
+        currentDraw = { ...draw, isNew: false };
+        renderDrawScreen();
+        showScreen('screen-draw');
+      });
+      card.querySelector('.delete-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteDraw(draw.id);
+        renderHome();
+      });
+      list.appendChild(card);
+    });
+  }
+
+  // ── Entry screen ──
+  function renderPills() {
+    const list = document.getElementById('pill-list');
+    list.innerHTML = '';
+    surfers.forEach((name, i) => {
+      const pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.innerHTML = `${escHtml(name)}<button class="pill-remove" aria-label="Remove ${escHtml(name)}" data-idx="${i}">&times;</button>`;
+      list.appendChild(pill);
+    });
+    document.getElementById('surfer-count').textContent =
+      `${surfers.length} surfer${surfers.length !== 1 ? 's' : ''}`;
+    document.getElementById('btn-generate').disabled = surfers.length < 2;
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  document.getElementById('pill-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('.pill-remove');
+    if (!btn) return;
+    surfers.splice(Number(btn.dataset.idx), 1);
+    renderPills();
+  });
+
+  function addName() {
+    const input = document.getElementById('name-input');
+    const name = input.value.trim();
+    if (!name) return;
+    surfers.push(name);
+    input.value = '';
+    renderPills();
+    input.focus();
+  }
+
+  document.getElementById('name-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addName();
+  });
+  document.getElementById('btn-add-name').addEventListener('click', addName);
+
+  document.getElementById('btn-generate').addEventListener('click', () => {
+    const heats = buildHeats([...surfers]);
+    currentDraw = { heats, surfers: [...surfers], isNew: true };
+    renderDrawScreen();
+    showScreen('screen-draw');
+  });
+
+  // ── Draw screen ──
+  function renderDrawScreen() {
+    const { heats, surfers: drawSurfers, createdAt, isNew } = currentDraw;
+
+    document.getElementById('draw-title').textContent =
+      isNew ? 'New Draw' : 'Heat Draw';
+
+    const metaEl = document.getElementById('draw-meta');
+    if (createdAt) {
+      metaEl.textContent = new Date(createdAt).toLocaleDateString(undefined, {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } else {
+      metaEl.textContent = `${drawSurfers.length} surfers · ${heats.length} heat${heats.length !== 1 ? 's' : ''}`;
+    }
+
+    document.getElementById('btn-regenerate').style.display = isNew ? '' : 'none';
+    document.getElementById('btn-save').style.display = isNew ? '' : 'none';
+    document.getElementById('btn-delete').style.display = isNew ? 'none' : '';
+
+    const grid = document.getElementById('heats-grid');
+    grid.innerHTML = '';
+    heats.forEach(heat => {
+      const card = document.createElement('div');
+      card.className = 'heat-card';
+      card.innerHTML = `<h3>Heat ${heat.heatNumber}</h3><div class="heat-surfers"></div>`;
+      const surferList = card.querySelector('.heat-surfers');
+      heat.surfers.forEach(s => {
+        const chip = document.createElement('div');
+        chip.className = 'surfer-chip';
+        chip.style.background = s.color.bg + '22';
+        chip.style.borderColor = s.color.bg;
+        chip.style.color = s.color.bg === '#FFFFFF' ? '#f1f5f9' : s.color.bg;
+        chip.innerHTML = `
+          <span class="vest-badge" style="background:${s.color.bg};color:${s.color.text};border:1.5px solid ${s.color.border}">${s.vestNumber}</span>
+          <span>${escHtml(s.name)}</span>
+          <span style="margin-left:auto;font-size:0.7rem;font-weight:700;opacity:0.7">${s.color.name.toUpperCase()}</span>
+        `;
+        surferList.appendChild(chip);
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  document.getElementById('btn-regenerate').addEventListener('click', () => {
+    const heats = buildHeats([...currentDraw.surfers]);
+    currentDraw = { ...currentDraw, heats, isNew: true };
+    renderDrawScreen();
+  });
+
+  document.getElementById('btn-save').addEventListener('click', () => {
+    const draw = {
+      id: generateId(),
+      createdAt: new Date().toISOString(),
+      surfers: currentDraw.surfers,
+      heats: currentDraw.heats,
+    };
+    persistDraw(draw);
+    surfers = [];
+    renderPills();
+    renderHome();
+    showScreen('screen-home');
+  });
+
+  document.getElementById('btn-delete').addEventListener('click', () => {
+    if (currentDraw.id) deleteDraw(currentDraw.id);
+    renderHome();
+    showScreen('screen-home');
+  });
+
+  document.getElementById('btn-draw-back').addEventListener('click', () => {
+    if (currentDraw?.isNew) {
+      showScreen('screen-entry');
+    } else {
+      renderHome();
+      showScreen('screen-home');
+    }
+  });
+
+  // ── Nav ──
+  document.getElementById('btn-new-draw').addEventListener('click', () => {
+    surfers = [];
+    renderPills();
+    showScreen('screen-entry');
+  });
+  document.getElementById('btn-new-draw-empty').addEventListener('click', () => {
+    surfers = [];
+    renderPills();
+    showScreen('screen-entry');
+  });
+  document.getElementById('btn-entry-back').addEventListener('click', () => {
+    renderHome();
+    showScreen('screen-home');
+  });
+
+  // ── Init ──
+  renderHome();
+</script>
+</body>
+</html>
