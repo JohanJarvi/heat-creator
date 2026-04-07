@@ -334,6 +334,57 @@
     }
 
     .heat-header h3 { margin-bottom: 0; }
+
+    .heat-time {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.01em;
+    }
+
+    #schedule-bar {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .sched-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .sched-field {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .sched-field input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.85rem;
+      padding: 0.3rem 0.5rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .sched-field input:focus { border-color: var(--accent); }
+    .sched-field input[type="time"] { width: 115px; }
+    .sched-field input[type="number"] { width: 58px; }
   </style>
 </head>
 <body>
@@ -387,6 +438,23 @@
     <button class="btn-danger" id="btn-delete" style="display:none">Delete</button>
   </div>
   <div class="draw-meta" id="draw-meta"></div>
+  <div id="schedule-bar">
+    <span class="sched-label">Schedule</span>
+    <label class="sched-field">
+      Start time
+      <input type="time" id="sched-start" />
+    </label>
+    <label class="sched-field">
+      Heat duration
+      <input type="number" id="sched-heat-dur" min="1" max="120" placeholder="25" />
+      min
+    </label>
+    <label class="sched-field">
+      Hold between heats
+      <input type="number" id="sched-hold-dur" min="0" max="60" placeholder="5" />
+      min
+    </label>
+  </div>
   <div class="heats-grid" id="heats-grid"></div>
 </section>
 
@@ -537,6 +605,17 @@
   });
 
   // ── Draw screen helpers ──
+  function calcHeatStartTime(heatIndex, schedule) {
+    if (!schedule?.startTime || !schedule?.heatDuration) return null;
+    const [h, m] = schedule.startTime.split(':').map(Number);
+    const totalMins = h * 60 + m + heatIndex * (Number(schedule.heatDuration) + Number(schedule.holdDuration || 0));
+    const hh = Math.floor(totalMins / 60) % 24;
+    const mm = totalMins % 60;
+    const period = hh < 12 ? 'AM' : 'PM';
+    const displayH = hh % 12 || 12;
+    return `${displayH}:${String(mm).padStart(2, '0')} ${period}`;
+  }
+
   function revestHeat(heat) {
     heat.surfers = heat.surfers.map((s, i) => ({
       ...s,
@@ -616,14 +695,20 @@
     document.getElementById('btn-save-changes').style.display = (!isNew && isDirty) ? '' : 'none';
     document.getElementById('btn-delete').style.display = (isNew || isDirty) ? 'none' : '';
 
+    const sched = currentDraw.schedule || {};
+    document.getElementById('sched-start').value = sched.startTime || '';
+    document.getElementById('sched-heat-dur').value = sched.heatDuration || '';
+    document.getElementById('sched-hold-dur').value = sched.holdDuration || '';
+
     const grid = document.getElementById('heats-grid');
     grid.innerHTML = '';
     heats.forEach((heat, hIdx) => {
       const card = document.createElement('div');
       card.className = 'heat-card';
+      const startTime = calcHeatStartTime(hIdx, currentDraw.schedule);
       card.innerHTML = `
         <div class="heat-header">
-          <h3>Heat ${heat.heatNumber}</h3>
+          <h3>Heat ${heat.heatNumber}${startTime ? ` <span class="heat-time">${startTime}</span>` : ''}</h3>
           <button class="chip-btn heat-delete-btn" data-heat="${hIdx}" aria-label="Delete Heat ${heat.heatNumber}" title="Delete heat">×</button>
         </div>
         <div class="heat-surfers"></div>
@@ -689,6 +774,7 @@
       createdAt: new Date().toISOString(),
       surfers: currentDraw.surfers,
       heats: currentDraw.heats,
+      schedule: currentDraw.schedule || null,
     };
     persistDraw(draw);
     surfers = [];
@@ -756,12 +842,25 @@
 
   document.getElementById('btn-add-heat').addEventListener('click', addNewHeat);
 
+  ['sched-start', 'sched-heat-dur', 'sched-hold-dur'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => {
+      currentDraw.schedule = {
+        startTime: document.getElementById('sched-start').value,
+        heatDuration: document.getElementById('sched-heat-dur').value,
+        holdDuration: document.getElementById('sched-hold-dur').value,
+      };
+      if (!currentDraw.isNew) currentDraw.isDirty = true;
+      renderDrawScreen();
+    });
+  });
+
   document.getElementById('btn-save-changes').addEventListener('click', () => {
     const draw = {
       id: currentDraw.id,
       createdAt: currentDraw.createdAt,
       surfers: currentDraw.surfers,
       heats: currentDraw.heats,
+      schedule: currentDraw.schedule || null,
     };
     updateDraw(draw);
     currentDraw.isDirty = false;
