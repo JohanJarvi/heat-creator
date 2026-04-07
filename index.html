@@ -436,6 +436,7 @@
     <button class="btn-ghost" id="btn-add-heat" style="display:none">+ Add Heat</button>
     <button class="btn-primary" id="btn-save-changes" style="display:none">Save Changes</button>
     <button class="btn-danger" id="btn-delete" style="display:none">Delete</button>
+    <button class="btn-ghost" id="btn-share" style="display:none">Share</button>
   </div>
   <div class="draw-meta" id="draw-meta"></div>
   <div id="schedule-bar">
@@ -460,6 +461,23 @@
 
 <script type="module">
   import { buildHeats, VEST_COLORS } from './heat-algorithm.js';
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js';
+  import { getFirestore, doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
+  import { firebaseConfig } from './firebase-config.js';
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  async function saveToFirestore(draw) {
+    try { await setDoc(doc(db, 'draws', draw.id), draw); } catch (e) { console.error('Firestore save failed', e); }
+  }
+
+  async function loadFromFirestore(id) {
+    try {
+      const snap = await getDoc(doc(db, 'draws', id));
+      return snap.exists() ? snap.data() : null;
+    } catch (e) { console.error('Firestore load failed', e); return null; }
+  }
 
   // ── State ──
   const STORAGE_KEY = 'heat-creator-draws';
@@ -689,16 +707,21 @@
       metaEl.textContent = `${drawSurfers.length} surfers · ${heats.length} heat${heats.length !== 1 ? 's' : ''}`;
     }
 
+    const readOnly = !!currentDraw.readOnly;
     document.getElementById('btn-regenerate').style.display = isNew ? '' : 'none';
     document.getElementById('btn-save').style.display = isNew ? '' : 'none';
-    document.getElementById('btn-add-heat').style.display = '';
-    document.getElementById('btn-save-changes').style.display = (!isNew && isDirty) ? '' : 'none';
-    document.getElementById('btn-delete').style.display = (isNew || isDirty) ? 'none' : '';
+    document.getElementById('btn-add-heat').style.display = readOnly ? 'none' : '';
+    document.getElementById('btn-save-changes').style.display = (!isNew && isDirty && !readOnly) ? '' : 'none';
+    document.getElementById('btn-delete').style.display = (isNew || isDirty || readOnly) ? 'none' : '';
+    document.getElementById('btn-share').style.display = (!isNew && !readOnly) ? '' : 'none';
 
     const sched = currentDraw.schedule || {};
     document.getElementById('sched-start').value = sched.startTime || '';
     document.getElementById('sched-heat-dur').value = sched.heatDuration || '';
     document.getElementById('sched-hold-dur').value = sched.holdDuration || '';
+    ['sched-start', 'sched-heat-dur', 'sched-hold-dur'].forEach(id => {
+      document.getElementById(id).disabled = readOnly;
+    });
 
     const grid = document.getElementById('heats-grid');
     grid.innerHTML = '';
@@ -709,7 +732,7 @@
       card.innerHTML = `
         <div class="heat-header">
           <h3>Heat ${heat.heatNumber}${startTime ? ` <span class="heat-time">${startTime}</span>` : ''}</h3>
-          <button class="chip-btn heat-delete-btn" data-heat="${hIdx}" aria-label="Delete Heat ${heat.heatNumber}" title="Delete heat">×</button>
+          ${readOnly ? '' : `<button class="chip-btn heat-delete-btn" data-heat="${hIdx}" aria-label="Delete Heat ${heat.heatNumber}" title="Delete heat">×</button>`}
         </div>
         <div class="heat-surfers"></div>
       `;
@@ -736,16 +759,19 @@
           <span class="chip-name">${escHtml(s.name)}</span>
           <span class="chip-actions">
             <span class="chip-vest-label">${s.color.name.toUpperCase()}</span>
+            ${readOnly ? '' : `
             <select class="chip-move-select" data-heat="${hIdx}" data-surfer="${sIdx}" aria-label="Move ${escHtml(s.name)}">
               <option value="">Move…</option>
               ${moveOptions}
             </select>
             <button class="chip-btn chip-remove" data-heat="${hIdx}" data-surfer="${sIdx}" aria-label="Remove ${escHtml(s.name)}">×</button>
+            `}
           </span>
         `;
         surferList.appendChild(chip);
       });
 
+      if (!readOnly) {
       const addSection = document.createElement('div');
       if (heat.surfers.length >= 6) {
         addSection.className = 'heat-full-notice';
@@ -758,6 +784,7 @@
         `;
       }
       card.appendChild(addSection);
+      }
       grid.appendChild(card);
     });
   }
@@ -777,6 +804,7 @@
       schedule: currentDraw.schedule || null,
     };
     persistDraw(draw);
+    saveToFirestore(draw);
     surfers = [];
     renderPills();
     renderHome();
@@ -863,8 +891,18 @@
       schedule: currentDraw.schedule || null,
     };
     updateDraw(draw);
+    saveToFirestore(draw);
     currentDraw.isDirty = false;
     renderDrawScreen();
+  });
+
+  document.getElementById('btn-share').addEventListener('click', () => {
+    const url = `${location.origin}${location.pathname}#/draw/${currentDraw.id}`;
+    navigator.clipboard.writeText(url).then(() => {
+      const btn = document.getElementById('btn-share');
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Share'; }, 2000);
+    });
   });
 
   // ── Nav ──
@@ -885,6 +923,17 @@
 
   // ── Init ──
   renderHome();
+
+  const sharedMatch = location.hash.match(/^#\/draw\/([^/]+)$/);
+  if (sharedMatch) {
+    loadFromFirestore(sharedMatch[1]).then(draw => {
+      if (draw) {
+        currentDraw = { ...draw, isNew: false, readOnly: true };
+        renderDrawScreen();
+        showScreen('screen-draw');
+      }
+    });
+  }
 </script>
 </body>
 </html>
