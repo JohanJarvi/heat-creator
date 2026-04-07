@@ -144,3 +144,63 @@ Every `git push` to `main` redeploys automatically. No CI config needed.
 5. Reload the page → verify saved draw is still listed (localStorage persisted)
 6. Delete the draw → verify it disappears from the list
 7. Test with 4 names to confirm minimum 2 heats of 2
+
+---
+
+## Future Improvements
+
+### 1. Move surfers between heats
+
+After a draw is generated or loaded from a saved draw, allow surfers to be moved from one heat to another. This covers the common scenario where someone needs to leave early and must be slotted into an earlier heat.
+
+- Provide a way on the draw view screen to move a surfer from their current heat into a different heat
+- Vest colours/numbers should be reassigned automatically after the move so they stay sequential within each heat
+- Moving a surfer into a heat that already has 6 surfers (the max) should be prevented or warned against
+- The updated draw should be saveable
+
+### 2. Add and remove surfers from an existing draw
+
+Allow surfers to be added to or removed from a draw without regenerating the entire draw. This keeps the existing heat assignments stable for everyone else.
+
+- Provide a way to add a new surfer to a specific heat
+- Provide a way to remove a surfer from a heat
+- Adding a surfer should auto-assign them the next available vest colour in that heat
+- Removing a surfer should re-number the remaining vests so there are no gaps
+- If adding a surfer would exceed the max heat size (6), either warn or offer to place them in a different heat
+- The heat count should remain unchanged — new surfers slot into existing heats rather than creating new ones
+- The updated draw should be saveable
+
+### 3. Heat scheduling (start time, duration, hold)
+
+When creating a draw, allow the user to specify:
+
+- **Start time** — when the first heat begins (e.g. 7:00 AM)
+- **Heat duration** — how long each heat runs (e.g. 25 minutes)
+- **Hold duration** — gap between heats (e.g. 5 minutes)
+
+Each heat card on the draw view screen should then display its calculated start time. For example with a 7:00 AM start, 25 min heats, and 5 min holds:
+
+| Heat | Start time |
+|------|------------|
+| Heat 1 | 7:00 AM |
+| Heat 2 | 7:30 AM |
+| Heat 3 | 8:00 AM |
+| Heat 4 | 8:30 AM |
+
+- These fields should be optional — if not provided, heats display without times (current behaviour)
+- The schedule settings should be saved alongside the draw in localStorage
+- Changing heat duration or hold after generation should recalculate all start times
+
+### 4. Shareable draw URLs
+
+Allow a draw to be shared via a unique URL so anyone can view it without needing the creator's browser/localStorage.
+
+**Approaches (in order of complexity):**
+
+1. **URL hash encoding (no backend)** — compress + base64 the draw JSON into the URL fragment (e.g. `heat-creator/#eyJoZWF0cy...`). Works on GitHub Pages as-is, but URLs get long with many surfers and there's no short unique ID.
+
+2. **Firebase/Firestore (recommended)** — generate a short unique ID, store the draw in Firestore, load it at `heat-creator/{id}`. The app stays as a static site on GitHub Pages, just adds the Firebase SDK for reads/writes. Free tier is generous for low traffic.
+
+3. **Own backend** — a small server (Node/Deno) with a database (SQLite/Postgres) for full control. Requires hosting (Fly.io, Railway, etc.) and is a larger overhaul.
+
+This enhancement may require migrating away from localStorage as the sole persistence layer depending on the approach chosen.

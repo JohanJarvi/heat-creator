@@ -256,6 +256,82 @@
       border-radius: 4px;
       flex-shrink: 0;
     }
+
+    .chip-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      flex-shrink: 0;
+    }
+
+    .chip-vest-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      opacity: 0.7;
+    }
+
+    .chip-move-select {
+      font-size: 0.72rem;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.1rem 0.2rem;
+      cursor: pointer;
+      max-width: 76px;
+    }
+
+    .chip-btn {
+      background: none;
+      border: none;
+      padding: 0.1rem 0.3rem;
+      font-size: 0.95rem;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--text-muted);
+      line-height: 1;
+      transition: color 0.15s;
+    }
+    .chip-btn:hover { color: var(--danger); }
+
+    .heat-add-form {
+      display: flex;
+      gap: 0.4rem;
+      margin-top: 0.6rem;
+      padding-top: 0.6rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .heat-add-form input[type="text"] {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.6rem;
+    }
+
+    .heat-add-form button {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.65rem;
+      white-space: nowrap;
+    }
+
+    .heat-full-notice {
+      margin-top: 0.6rem;
+      padding-top: 0.6rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: center;
+      font-style: italic;
+    }
+
+    .heat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .heat-header h3 { margin-bottom: 0; }
   </style>
 </head>
 <body>
@@ -304,6 +380,8 @@
     <h2 id="draw-title">Heat Draw</h2>
     <button class="btn-ghost" id="btn-regenerate" style="display:none">Regenerate</button>
     <button class="btn-primary" id="btn-save" style="display:none">Save Draw</button>
+    <button class="btn-ghost" id="btn-add-heat" style="display:none">+ Add Heat</button>
+    <button class="btn-primary" id="btn-save-changes" style="display:none">Save Changes</button>
     <button class="btn-danger" id="btn-delete" style="display:none">Delete</button>
   </div>
   <div class="draw-meta" id="draw-meta"></div>
@@ -331,6 +409,13 @@
   function persistDraw(draw) {
     const draws = loadDraws();
     draws.unshift(draw);
+    saveDraws(draws);
+  }
+
+  function updateDraw(draw) {
+    const draws = loadDraws();
+    const idx = draws.findIndex(d => d.id === draw.id);
+    if (idx !== -1) draws[idx] = draw;
     saveDraws(draws);
   }
 
@@ -449,9 +534,66 @@
     showScreen('screen-draw');
   });
 
+  // ── Draw screen helpers ──
+  function revestHeat(heat) {
+    heat.surfers = heat.surfers.map((s, i) => ({
+      ...s,
+      vestNumber: i + 1,
+      color: VEST_COLORS[i],
+    }));
+  }
+
+  function syncSurfersList() {
+    currentDraw.surfers = currentDraw.heats.flatMap(h => h.surfers.map(s => s.name));
+  }
+
+  function removeSurferFromHeat(heatIdx, surferIdx) {
+    currentDraw.heats[heatIdx].surfers.splice(surferIdx, 1);
+    revestHeat(currentDraw.heats[heatIdx]);
+    syncSurfersList();
+    currentDraw.isDirty = true;
+    renderDrawScreen();
+  }
+
+  function addSurferToHeat(heatIdx, name) {
+    const heat = currentDraw.heats[heatIdx];
+    if (heat.surfers.length >= 6) return;
+    const i = heat.surfers.length;
+    heat.surfers.push({ name, vestNumber: i + 1, color: VEST_COLORS[i] });
+    syncSurfersList();
+    currentDraw.isDirty = true;
+    renderDrawScreen();
+  }
+
+  function moveSurferToHeat(fromHeatIdx, surferIdx, toHeatIdx) {
+    const toHeat = currentDraw.heats[toHeatIdx];
+    if (toHeat.surfers.length >= 6) return;
+    const [surfer] = currentDraw.heats[fromHeatIdx].surfers.splice(surferIdx, 1);
+    toHeat.surfers.push(surfer);
+    revestHeat(currentDraw.heats[fromHeatIdx]);
+    revestHeat(toHeat);
+    syncSurfersList();
+    currentDraw.isDirty = true;
+    renderDrawScreen();
+  }
+
+  function addNewHeat() {
+    currentDraw.heats.push({ heatNumber: currentDraw.heats.length + 1, surfers: [] });
+    currentDraw.isDirty = true;
+    renderDrawScreen();
+  }
+
+  function deleteHeat(heatIdx) {
+    currentDraw.heats.splice(heatIdx, 1);
+    currentDraw.heats.forEach((h, i) => { h.heatNumber = i + 1; });
+    syncSurfersList();
+    currentDraw.isDirty = true;
+    renderDrawScreen();
+  }
+
   // ── Draw screen ──
   function renderDrawScreen() {
-    const { heats, surfers: drawSurfers, createdAt, isNew } = currentDraw;
+    const { heats, surfers: drawSurfers, createdAt, isNew, isDirty } = currentDraw;
 
     document.getElementById('draw-title').textContent =
       isNew ? 'New Draw' : 'Heat Draw';
@@ -468,16 +610,25 @@
 
     document.getElementById('btn-regenerate').style.display = isNew ? '' : 'none';
     document.getElementById('btn-save').style.display = isNew ? '' : 'none';
-    document.getElementById('btn-delete').style.display = isNew ? 'none' : '';
+    document.getElementById('btn-add-heat').style.display = '';
+    document.getElementById('btn-save-changes').style.display = (!isNew && isDirty) ? '' : 'none';
+    document.getElementById('btn-delete').style.display = (isNew || isDirty) ? 'none' : '';
 
     const grid = document.getElementById('heats-grid');
     grid.innerHTML = '';
-    heats.forEach(heat => {
+    heats.forEach((heat, hIdx) => {
       const card = document.createElement('div');
       card.className = 'heat-card';
-      card.innerHTML = `<h3>Heat ${heat.heatNumber}</h3><div class="heat-surfers"></div>`;
+      card.innerHTML = `
+        <div class="heat-header">
+          <h3>Heat ${heat.heatNumber}</h3>
+          <button class="chip-btn heat-delete-btn" data-heat="${hIdx}" aria-label="Delete Heat ${heat.heatNumber}" title="Delete heat">×</button>
+        </div>
+        <div class="heat-surfers"></div>
+      `;
       const surferList = card.querySelector('.heat-surfers');
-      heat.surfers.forEach(s => {
+
+      heat.surfers.forEach((s, sIdx) => {
         const chip = document.createElement('div');
         chip.className = 'surfer-chip';
         chip.style.background = s.color.bg + '22';
@@ -485,13 +636,41 @@
         chip.style.color = s.color.bg === '#FFFFFF' ? '#f1f5f9'
           : s.color.bg === '#1A202C' ? '#94a3b8'
           : s.color.bg;
+
+        const moveOptions = heats
+          .map((h, i) => i !== hIdx
+            ? `<option value="${i}" ${h.surfers.length >= 6 ? 'disabled' : ''}>Heat ${h.heatNumber}${h.surfers.length >= 6 ? ' (full)' : ''}</option>`
+            : null)
+          .filter(Boolean)
+          .join('') + '<option value="new">+ New heat</option>';
+
         chip.innerHTML = `
           <span class="vest-badge" style="background:${s.color.bg};color:${s.color.text};border:1.5px solid ${s.color.border}">${s.vestNumber}</span>
           <span>${escHtml(s.name)}</span>
-          <span style="margin-left:auto;font-size:0.7rem;font-weight:700;opacity:0.7">${s.color.name.toUpperCase()}</span>
+          <span class="chip-actions">
+            <span class="chip-vest-label">${s.color.name.toUpperCase()}</span>
+            <select class="chip-move-select" data-heat="${hIdx}" data-surfer="${sIdx}" aria-label="Move ${escHtml(s.name)}">
+              <option value="">Move…</option>
+              ${moveOptions}
+            </select>
+            <button class="chip-btn chip-remove" data-heat="${hIdx}" data-surfer="${sIdx}" aria-label="Remove ${escHtml(s.name)}">×</button>
+          </span>
         `;
         surferList.appendChild(chip);
       });
+
+      const addSection = document.createElement('div');
+      if (heat.surfers.length >= 6) {
+        addSection.className = 'heat-full-notice';
+        addSection.textContent = 'Heat full (max 6)';
+      } else {
+        addSection.className = 'heat-add-form';
+        addSection.innerHTML = `
+          <input type="text" class="heat-add-input" data-heat="${hIdx}" placeholder="Add surfer…" autocomplete="off" />
+          <button class="btn-primary heat-add-btn" data-heat="${hIdx}">Add</button>
+        `;
+      }
+      card.appendChild(addSection);
       grid.appendChild(card);
     });
   }
@@ -529,6 +708,62 @@
       renderHome();
       showScreen('screen-home');
     }
+  });
+
+  document.getElementById('heats-grid').addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('.chip-remove');
+    if (removeBtn) {
+      removeSurferFromHeat(Number(removeBtn.dataset.heat), Number(removeBtn.dataset.surfer));
+      return;
+    }
+    const deleteHeatBtn = e.target.closest('.heat-delete-btn');
+    if (deleteHeatBtn) {
+      deleteHeat(Number(deleteHeatBtn.dataset.heat));
+      return;
+    }
+    const addBtn = e.target.closest('.heat-add-btn');
+    if (addBtn) {
+      const hIdx = Number(addBtn.dataset.heat);
+      const input = document.querySelector(`.heat-add-input[data-heat="${hIdx}"]`);
+      const name = input?.value.trim();
+      if (name) addSurferToHeat(hIdx, name);
+    }
+  });
+
+  document.getElementById('heats-grid').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const input = e.target.closest('.heat-add-input');
+    if (input) {
+      const name = input.value.trim();
+      if (name) addSurferToHeat(Number(input.dataset.heat), name);
+    }
+  });
+
+  document.getElementById('heats-grid').addEventListener('change', (e) => {
+    const select = e.target.closest('.chip-move-select');
+    if (!select || select.value === '') return;
+    const fromHeatIdx = Number(select.dataset.heat);
+    const surferIdx = Number(select.dataset.surfer);
+    if (select.value === 'new') {
+      currentDraw.heats.push({ heatNumber: currentDraw.heats.length + 1, surfers: [] });
+      moveSurferToHeat(fromHeatIdx, surferIdx, currentDraw.heats.length - 1);
+    } else {
+      moveSurferToHeat(fromHeatIdx, surferIdx, Number(select.value));
+    }
+  });
+
+  document.getElementById('btn-add-heat').addEventListener('click', addNewHeat);
+
+  document.getElementById('btn-save-changes').addEventListener('click', () => {
+    const draw = {
+      id: currentDraw.id,
+      createdAt: currentDraw.createdAt,
+      surfers: currentDraw.surfers,
+      heats: currentDraw.heats,
+    };
+    updateDraw(draw);
+    currentDraw.isDirty = false;
+    renderDrawScreen();
   });
 
   // ── Nav ──
