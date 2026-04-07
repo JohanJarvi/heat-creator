@@ -212,7 +212,7 @@
 
     .heats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
       gap: 1rem;
     }
 
@@ -257,8 +257,10 @@
       flex-shrink: 0;
     }
 
+    .chip-name { flex: 1; }
+
     .chip-actions {
-      margin-left: auto;
+      margin-left: 0;
       display: flex;
       align-items: center;
       gap: 0.4rem;
@@ -646,7 +648,7 @@
 
         chip.innerHTML = `
           <span class="vest-badge" style="background:${s.color.bg};color:${s.color.text};border:1.5px solid ${s.color.border}">${s.vestNumber}</span>
-          <span>${escHtml(s.name)}</span>
+          <span class="chip-name">${escHtml(s.name)}</span>
           <span class="chip-actions">
             <span class="chip-vest-label">${s.color.name.toUpperCase()}</span>
             <select class="chip-move-select" data-heat="${hIdx}" data-surfer="${sIdx}" aria-label="Move ${escHtml(s.name)}">
