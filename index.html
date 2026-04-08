@@ -348,6 +348,20 @@
 
     .heat-header h3 { margin-bottom: 0; }
 
+    #draw-title[contenteditable="true"] {
+      cursor: text;
+      border-bottom: 1px dashed var(--border);
+      outline: none;
+      min-width: 2rem;
+    }
+    #draw-title[contenteditable="true"]:focus { border-bottom-color: var(--accent); }
+
+    .draw-card-title {
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.15rem;
+    }
+
     .heat-time {
       font-size: 0.8rem;
       font-weight: 700;
@@ -428,6 +442,9 @@
   <div class="top-bar">
     <button class="btn-ghost" id="btn-entry-back">← Back</button>
     <h2>Add Surfers</h2>
+  </div>
+  <div class="input-row">
+    <input type="text" id="title-input" placeholder="Draw title (optional)…" autocomplete="off" />
   </div>
   <div class="input-row">
     <input type="text" id="name-input" placeholder="Surfer name…" autocomplete="off" />
@@ -567,7 +584,7 @@
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     if (id === 'screen-entry') {
-      setTimeout(() => document.getElementById('name-input').focus(), 50);
+      setTimeout(() => document.getElementById('title-input').focus(), 50);
     }
   }
 
@@ -617,6 +634,7 @@
       });
       card.innerHTML = `
         <div class="draw-card-info">
+          ${draw.title ? `<div class="draw-card-title">${escHtml(draw.title)}</div>` : ''}
           <div class="draw-card-date">${date}</div>
           <div class="draw-card-meta">
             <strong>${draw.surfers.length} surfers</strong> &middot;
@@ -679,6 +697,10 @@
     input.focus();
   }
 
+  document.getElementById('title-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('name-input').focus();
+  });
+
   document.getElementById('name-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') addName();
   });
@@ -686,9 +708,40 @@
 
   document.getElementById('btn-generate').addEventListener('click', () => {
     const heats = buildHeats([...surfers]);
-    currentDraw = { heats, surfers: [...surfers], isNew: true };
+    const title = document.getElementById('title-input').value.trim() || null;
+    currentDraw = { heats, surfers: [...surfers], isNew: true, title };
     renderDrawScreen();
     showScreen('screen-draw');
+  });
+
+  function canEditCheck() {
+    return !!currentUser && OWNER_UIDS.includes(currentUser.uid) && currentDraw && !currentDraw.readOnly;
+  }
+
+  let titleDebounce;
+  document.getElementById('draw-title').addEventListener('input', () => {
+    if (!canEditCheck()) return;
+    clearTimeout(titleDebounce);
+    titleDebounce = setTimeout(() => {
+      currentDraw.title = document.getElementById('draw-title').textContent.trim() || null;
+      if (!currentDraw.isNew) {
+        currentDraw.isDirty = true;
+        document.getElementById('btn-save-changes').style.display = '';
+        document.getElementById('btn-delete').style.display = 'none';
+      }
+    }, 400);
+  });
+
+  document.getElementById('draw-title').addEventListener('blur', () => {
+    if (!canEditCheck()) return;
+    clearTimeout(titleDebounce);
+    currentDraw.title = document.getElementById('draw-title').textContent.trim() || null;
+    if (!currentDraw.isNew) currentDraw.isDirty = true;
+    renderDrawScreen();
+  });
+
+  document.getElementById('draw-title').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
   });
 
   // ── Draw screen helpers ──
@@ -763,9 +816,6 @@
   function renderDrawScreen() {
     const { heats, surfers: drawSurfers, createdAt, isNew, isDirty } = currentDraw;
 
-    document.getElementById('draw-title').textContent =
-      isNew ? 'New Draw' : 'Heat Draw';
-
     const metaEl = document.getElementById('draw-meta');
     if (createdAt) {
       metaEl.textContent = new Date(createdAt).toLocaleDateString(undefined, {
@@ -778,6 +828,9 @@
 
     const readOnly = !!currentDraw.readOnly;
     const canEdit = !readOnly && !!currentUser && OWNER_UIDS.includes(currentUser.uid);
+    const titleEl = document.getElementById('draw-title');
+    titleEl.textContent = currentDraw.title || (isNew ? 'New Draw' : 'Heat Draw');
+    titleEl.contentEditable = canEdit ? 'true' : 'false';
     document.getElementById('btn-regenerate').style.display = (isNew && canEdit) ? '' : 'none';
     document.getElementById('btn-save').style.display = (isNew && canEdit) ? '' : 'none';
     document.getElementById('btn-add-heat').style.display = canEdit ? '' : 'none';
@@ -869,6 +922,7 @@
     const draw = {
       id: generateId(),
       createdAt: new Date().toISOString(),
+      title: currentDraw.title || null,
       surfers: currentDraw.surfers,
       heats: currentDraw.heats,
       schedule: currentDraw.schedule || null,
@@ -959,6 +1013,7 @@
     const draw = {
       id: currentDraw.id,
       createdAt: currentDraw.createdAt,
+      title: currentDraw.title || null,
       surfers: currentDraw.surfers,
       heats: currentDraw.heats,
       schedule: currentDraw.schedule || null,
@@ -988,11 +1043,13 @@
   document.getElementById('btn-new-draw').addEventListener('click', () => {
     surfers = [];
     renderPills();
+    document.getElementById('title-input').value = '';
     showScreen('screen-entry');
   });
   document.getElementById('btn-new-draw-empty').addEventListener('click', () => {
     surfers = [];
     renderPills();
+    document.getElementById('title-input').value = '';
     showScreen('screen-entry');
   });
   document.getElementById('btn-entry-back').addEventListener('click', () => {
