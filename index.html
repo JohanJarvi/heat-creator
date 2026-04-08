@@ -476,7 +476,7 @@
 <script type="module">
   import { buildHeats, VEST_COLORS } from './heat-algorithm.js';
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js';
-  import { getFirestore, doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
+  import { getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, query, orderBy } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
   import { getAuth, signInWithPopup, signOut, onAuthStateChanged, GithubAuthProvider } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js';
   import { firebaseConfig } from './firebase-config.js';
 
@@ -510,6 +510,18 @@
       const snap = await getDoc(doc(db, 'draws', id));
       return snap.exists() ? snap.data() : null;
     } catch (e) { console.error('Firestore load failed', e); return null; }
+  }
+
+  async function loadAllDrawsFromFirestore() {
+    try {
+      const q = query(collection(db, 'draws'), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => d.data());
+    } catch (e) { console.error('Firestore load all failed', e); return []; }
+  }
+
+  async function deleteFromFirestore(id) {
+    try { await deleteDoc(doc(db, 'draws', id)); } catch (e) { console.error('Firestore delete failed', e); }
   }
 
   // ── State ──
@@ -560,26 +572,30 @@
   }
 
   // ── Home screen ──
-  function renderHome() {
+  async function renderHome() {
     const authArea = document.getElementById('auth-area');
     const newDrawBtn = document.getElementById('btn-new-draw');
     const isOwner = currentUser && OWNER_UIDS.includes(currentUser.uid);
-    if (isOwner) {
+
+    if (currentUser) {
       authArea.innerHTML = `
         <div class="auth-user">
           <span class="auth-name">${escHtml(currentUser.displayName || 'Signed in')}</span>
           <button class="btn-ghost" id="btn-signout">Sign out</button>
         </div>
       `;
-      newDrawBtn.style.display = '';
     } else {
       authArea.innerHTML = `<button class="btn-ghost" id="btn-signin">Sign in with GitHub</button>`;
-      newDrawBtn.style.display = 'none';
     }
+    newDrawBtn.style.display = isOwner ? '' : 'none';
 
-    const draws = loadDraws();
     const list = document.getElementById('draw-list');
     const empty = document.getElementById('empty-state');
+    list.innerHTML = '<p style="padding:1rem;color:var(--text-muted);font-size:0.875rem">Loading…</p>';
+    list.style.display = 'flex';
+    empty.style.display = 'none';
+
+    const draws = await loadAllDrawsFromFirestore();
     list.innerHTML = '';
 
     if (draws.length === 0) {
@@ -607,7 +623,7 @@
             ${draw.heats.length} heat${draw.heats.length !== 1 ? 's' : ''}
           </div>
         </div>
-        <button class="btn-danger delete-btn" data-id="${draw.id}">Delete</button>
+        ${isOwner ? `<button class="btn-danger delete-btn" data-id="${draw.id}">Delete</button>` : ''}
       `;
       card.addEventListener('click', (e) => {
         if (e.target.classList.contains('delete-btn')) return;
@@ -615,11 +631,14 @@
         renderDrawScreen();
         showScreen('screen-draw');
       });
-      card.querySelector('.delete-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        deleteDraw(draw.id);
-        renderHome();
-      });
+      if (isOwner) {
+        card.querySelector('.delete-btn').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await deleteFromFirestore(draw.id);
+          deleteDraw(draw.id);
+          renderHome();
+        });
+      }
       list.appendChild(card);
     });
   }
@@ -862,8 +881,11 @@
     showScreen('screen-home');
   });
 
-  document.getElementById('btn-delete').addEventListener('click', () => {
-    if (currentDraw.id) deleteDraw(currentDraw.id);
+  document.getElementById('btn-delete').addEventListener('click', async () => {
+    if (currentDraw.id) {
+      await deleteFromFirestore(currentDraw.id);
+      deleteDraw(currentDraw.id);
+    }
     renderHome();
     showScreen('screen-home');
   });
