@@ -88,9 +88,22 @@
     /* ── Screen 1: Home ── */
     #screen-home .toolbar {
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
+      align-items: center;
       margin-bottom: 1.5rem;
     }
+
+    .auth-user {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .auth-name {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+
 
     .draw-list { display: flex; flex-direction: column; gap: 0.75rem; }
 
@@ -400,7 +413,8 @@
 <!-- ── Screen 1: Home ── -->
 <section id="screen-home" class="screen active">
   <div class="toolbar">
-    <button class="btn-primary" id="btn-new-draw">+ New Draw</button>
+    <button class="btn-primary" id="btn-new-draw" style="display:none">+ New Draw</button>
+    <div id="auth-area"></div>
   </div>
   <div class="draw-list" id="draw-list"></div>
   <div class="empty-state" id="empty-state" style="display:none">
@@ -463,10 +477,25 @@
   import { buildHeats, VEST_COLORS } from './heat-algorithm.js';
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js';
   import { getFirestore, doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
+  import { getAuth, signInWithPopup, signOut, onAuthStateChanged, GithubAuthProvider } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js';
   import { firebaseConfig } from './firebase-config.js';
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+  const auth = getAuth(app);
+  const githubProvider = new GithubAuthProvider();
+  let currentUser = null;
+
+  function signIn() { signInWithPopup(auth, githubProvider).catch(e => console.error('Sign in failed', e)); }
+  function signOutUser() { signOut(auth); }
+
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    renderHome();
+    if (document.getElementById('screen-draw').classList.contains('active') && currentDraw) {
+      renderDrawScreen();
+    }
+  });
 
   async function saveToFirestore(draw) {
     try { await setDoc(doc(db, 'draws', draw.id), draw); } catch (e) { console.error('Firestore save failed', e); }
@@ -528,6 +557,21 @@
 
   // ── Home screen ──
   function renderHome() {
+    const authArea = document.getElementById('auth-area');
+    const newDrawBtn = document.getElementById('btn-new-draw');
+    if (currentUser) {
+      authArea.innerHTML = `
+        <div class="auth-user">
+          <span class="auth-name">${escHtml(currentUser.displayName || 'Signed in')}</span>
+          <button class="btn-ghost" id="btn-signout">Sign out</button>
+        </div>
+      `;
+      newDrawBtn.style.display = '';
+    } else {
+      authArea.innerHTML = `<button class="btn-ghost" id="btn-signin">Sign in with GitHub</button>`;
+      newDrawBtn.style.display = 'none';
+    }
+
     const draws = loadDraws();
     const list = document.getElementById('draw-list');
     const empty = document.getElementById('empty-state');
@@ -535,6 +579,7 @@
 
     if (draws.length === 0) {
       empty.style.display = 'block';
+      empty.querySelector('#btn-new-draw-empty').style.display = currentUser ? '' : 'none';
       list.style.display = 'none';
       return;
     }
@@ -708,11 +753,12 @@
     }
 
     const readOnly = !!currentDraw.readOnly;
-    document.getElementById('btn-regenerate').style.display = isNew ? '' : 'none';
-    document.getElementById('btn-save').style.display = isNew ? '' : 'none';
-    document.getElementById('btn-add-heat').style.display = readOnly ? 'none' : '';
-    document.getElementById('btn-save-changes').style.display = (!isNew && isDirty && !readOnly) ? '' : 'none';
-    document.getElementById('btn-delete').style.display = (isNew || isDirty || readOnly) ? 'none' : '';
+    const canEdit = !readOnly && !!currentUser;
+    document.getElementById('btn-regenerate').style.display = (isNew && canEdit) ? '' : 'none';
+    document.getElementById('btn-save').style.display = (isNew && canEdit) ? '' : 'none';
+    document.getElementById('btn-add-heat').style.display = canEdit ? '' : 'none';
+    document.getElementById('btn-save-changes').style.display = (canEdit && !isNew && isDirty) ? '' : 'none';
+    document.getElementById('btn-delete').style.display = (canEdit && !isNew && !isDirty) ? '' : 'none';
     document.getElementById('btn-share').style.display = (!isNew && !readOnly) ? '' : 'none';
 
     const sched = currentDraw.schedule || {};
@@ -720,7 +766,7 @@
     document.getElementById('sched-heat-dur').value = sched.heatDuration || '';
     document.getElementById('sched-hold-dur').value = sched.holdDuration || '';
     ['sched-start', 'sched-heat-dur', 'sched-hold-dur'].forEach(id => {
-      document.getElementById(id).disabled = readOnly;
+      document.getElementById(id).disabled = !canEdit;
     });
 
     const grid = document.getElementById('heats-grid');
@@ -732,7 +778,7 @@
       card.innerHTML = `
         <div class="heat-header">
           <h3>Heat ${heat.heatNumber}${startTime ? ` <span class="heat-time">${startTime}</span>` : ''}</h3>
-          ${readOnly ? '' : `<button class="chip-btn heat-delete-btn" data-heat="${hIdx}" aria-label="Delete Heat ${heat.heatNumber}" title="Delete heat">×</button>`}
+          ${canEdit ? `<button class="chip-btn heat-delete-btn" data-heat="${hIdx}" aria-label="Delete Heat ${heat.heatNumber}" title="Delete heat">×</button>` : ''}
         </div>
         <div class="heat-surfers"></div>
       `;
@@ -759,19 +805,19 @@
           <span class="chip-name">${escHtml(s.name)}</span>
           <span class="chip-actions">
             <span class="chip-vest-label">${s.color.name.toUpperCase()}</span>
-            ${readOnly ? '' : `
+            ${canEdit ? `
             <select class="chip-move-select" data-heat="${hIdx}" data-surfer="${sIdx}" aria-label="Move ${escHtml(s.name)}">
               <option value="">Move…</option>
               ${moveOptions}
             </select>
             <button class="chip-btn chip-remove" data-heat="${hIdx}" data-surfer="${sIdx}" aria-label="Remove ${escHtml(s.name)}">×</button>
-            `}
+            ` : ''}
           </span>
         `;
         surferList.appendChild(chip);
       });
 
-      if (!readOnly) {
+      if (canEdit) {
       const addSection = document.createElement('div');
       if (heat.surfers.length >= 6) {
         addSection.className = 'heat-full-notice';
@@ -903,6 +949,12 @@
       btn.textContent = 'Copied!';
       setTimeout(() => { btn.textContent = 'Share'; }, 2000);
     });
+  });
+
+  // ── Auth ──
+  document.getElementById('auth-area').addEventListener('click', (e) => {
+    if (e.target.id === 'btn-signin') signIn();
+    if (e.target.id === 'btn-signout') signOutUser();
   });
 
   // ── Nav ──
